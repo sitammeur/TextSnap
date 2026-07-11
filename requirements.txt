@@ -4,5 +4,4 @@ spaces
 torch
 timm
 transformers==4.42.0
-supervision==0.25.1
-gradio
+supervision==0.29.1

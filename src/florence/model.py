@@ -1,10 +1,11 @@
 # Importing necessary libraries
 import sys
-import subprocess
 from typing import Optional
+from unittest.mock import patch
 from PIL import Image
 import torch
 from transformers import AutoProcessor, AutoModelForCausalLM
+from transformers.dynamic_module_utils import get_imports
 import spaces
 import gradio as gr
 
@@ -13,22 +14,34 @@ from src.logger import logging
 from src.exception import CustomExceptionHandling
 
 
-# Install the required dependencies
-subprocess.run(
-    "pip install flash-attn --no-build-isolation",
-    env={"FLASH_ATTENTION_SKIP_CUDA_BUILD": "TRUE"},
-    shell=True,
-)
+# Florence-2's custom modeling file (modeling_florence2.py) unconditionally
+# lists "flash_attn" as a required import, even though we load the model
+# with attn_implementation="eager" (which never touches flash_attn).
+# Actually installing a working flash-attn build inside a Space is slow
+# and often fails outright, since it needs a prebuilt wheel that exactly
+# matches the image's torch/CUDA/Python ABI -- if no match exists, pip
+# silently produces a non-functional stub package, which still leaves
+# the model unable to load. Since flash_attn isn't actually needed here,
+# the standard fix is to patch transformers' import-checker to drop
+# "flash_attn" from the required-imports list, only for this one file.
+# Reference: https://huggingface.co/microsoft/Florence-2-large-ft/discussions/4
+def _fixed_get_imports(filename):
+    imports = get_imports(filename)
+    if str(filename).endswith("/modeling_florence2.py") and "flash_attn" in imports:
+        imports.remove("flash_attn")
+    return imports
+
 
 # Load model and processor from Hugging Face
 model_id = "microsoft/Florence-2-large-ft"
 try:
-    model = (
-        AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16, trust_remote_code=True)
-        .to("cuda")
-        .eval()
-    )
-    processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
+    with patch("transformers.dynamic_module_utils.get_imports", _fixed_get_imports):
+        model = (
+            AutoModelForCausalLM.from_pretrained(model_id, attn_implementation="eager", torch_dtype=torch.float16, trust_remote_code=True)
+            .to("cuda")
+            .eval()
+        )
+        processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
     logging.info("Model and processor loaded successfully.")
 
 # Handle exceptions that may occur during the process

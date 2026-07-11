@@ -10,7 +10,13 @@ from src.florence.task import ocr_task
 image = gr.Image(type="pil", label="Image")
 
 # Output for the interface (image and text)
-ocr_text_output = gr.Textbox(label="OCR Text", show_label=True, show_copy_button=True)
+ocr_text_output = gr.Textbox(
+    label="OCR Text",
+    show_label=True,
+    show_copy_button=True,
+    lines=8,
+    max_lines=15,
+)
 ocr_image_output = gr.Image(type="pil", label="Output Image")
 
 # Examples for the interface (image paths)
