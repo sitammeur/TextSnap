@@ -5,3 +5,4 @@ torch
 timm
 transformers==4.42.0
 supervision==0.29.1
+gradio==5.49.1
